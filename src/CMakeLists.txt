@@ -1,0 +1,10 @@
+add_subdirectory(core)
+add_subdirectory(matrix)
+add_subdirectory(basis_finder_artificial)
+add_subdirectory(basis_finder_big_m)
+add_subdirectory(simplex)
+add_subdirectory(analysis)
+
+if(LIMO_BUILD_CLI)
+    add_subdirectory(cli)
+endif()

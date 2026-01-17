@@ -1,0 +1,1 @@
+@INCLUDE = "@CMAKE_SOURCE_DIR@/doc/Doxyfile.in"
