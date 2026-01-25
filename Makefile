@@ -1,4 +1,4 @@
-.PHONY: build build-debug build-release build-docs clean
+.PHONY: build build-debug build-release build-docs test clean
 
 BUILD_TYPE ?= Debug
 
@@ -15,6 +15,10 @@ build-release:
 build-docs:
 	cmake -S . -B build -DCMAKE_BUILD_TYPE=$(BUILD_TYPE) -DLIMO_BUILD_DOCS=ON
 	cmake --build build --target docs
+
+test:
+	cmake --build build --target tests
+	ctest --test-dir build
 
 clean:
 	rm -rf build
