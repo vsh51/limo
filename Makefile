@@ -19,12 +19,10 @@ build-docs:
 
 test:
 	cmake --build build --target tests
-	ctest --test-dir build
 
 coverage:
 	cmake -S . -B build -DCMAKE_BUILD_TYPE=$(BUILD_TYPE) -DLIMO_BUILD_TESTS=ON -DLIMO_ENABLE_COVERAGE=ON $(CMAKE_FLAGS)
 	cmake --build build --target tests
-	ctest --test-dir build
 	mkdir -p build/coverage-report
 	gcovr -r . build \
 		--exclude ".*/tests/.*" \
