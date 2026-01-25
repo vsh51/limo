@@ -11,7 +11,7 @@ target_include_directories(limo_simplex
 target_link_libraries(limo_simplex
     PUBLIC
         limo_core
-        limo_matrix
+        limo_numerics
         limo_basis_artificial
         limo_basis_big_m
 )

@@ -1,5 +1,6 @@
 add_subdirectory(core)
-add_subdirectory(matrix)
+add_subdirectory(thread_pool)
+add_subdirectory(numerics)
 add_subdirectory(basis_finder_artificial)
 add_subdirectory(basis_finder_big_m)
 add_subdirectory(simplex)
