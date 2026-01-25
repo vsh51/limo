@@ -10,5 +10,5 @@ target_include_directories(limo_basis_artificial
 target_link_libraries(limo_basis_artificial
     PUBLIC
         limo_core
-        limo_matrix
+        limo_numerics
 )
