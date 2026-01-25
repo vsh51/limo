@@ -10,6 +10,32 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 option(LIMO_BUILD_CLI "Build CLI application" ON)
 option(LIMO_BUILD_DOCS "Build Doxygen documentation" OFF)
+option(LIMO_BUILD_TESTS "Build unit tests" ON)
+option(LIMO_ENABLE_COVERAGE "Enable coverage flags (GNU/Clang)" OFF)
+
+if(LIMO_ENABLE_COVERAGE)
+	if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+		add_compile_options(--coverage -O0 -g)
+		add_link_options(--coverage)
+	endif()
+endif()
+
+if(LIMO_BUILD_TESTS)
+	include(FetchContent)
+	FetchContent_Declare(
+		googletest
+		URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
+		DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+	)
+	set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+	FetchContent_MakeAvailable(googletest)
+	enable_testing()
+
+	add_custom_target(tests
+		COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
+		COMMENT "Building and running unit tests"
+	)
+endif()
 
 if(LIMO_BUILD_DOCS)
 	find_package(Doxygen QUIET)
