@@ -1,9 +1,14 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  issue_comment:
+    types: [created]
 
 jobs:
   build-test-coverage:
+    if: >-
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '/test')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -23,3 +28,22 @@ jobs:
         with:
           name: coverage-report
           path: build/coverage-report
+
+  build-docs:
+    if: >-
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '/docs')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build documentation
+        run: |
+          make build-docs
+
+      - name: Upload documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: build/docs/html
