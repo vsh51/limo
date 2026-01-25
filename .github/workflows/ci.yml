@@ -118,6 +118,11 @@ jobs:
         with:
           ref: refs/pull/${{ github.event.issue.number }}/head
 
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y doxygen
+
       - name: Build documentation
         run: |
           make build-docs
