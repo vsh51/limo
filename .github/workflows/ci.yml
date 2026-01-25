@@ -1,13 +1,53 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+  checks: write
 
 jobs:
   build-test-coverage:
+    if: >-
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '/test')
     runs-on: ubuntu-latest
     steps:
+      - name: Acknowledge test run
+        id: test_check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = context.payload.issue.number;
+            const pr = await github.rest.pulls.get({ owner, repo, pull_number: prNumber });
+            const headSha = pr.data.head.sha;
+            const check = await github.rest.checks.create({
+              owner,
+              repo,
+              name: 'PR comment /test',
+              head_sha: headSha,
+              status: 'in_progress',
+              started_at: new Date().toISOString()
+            });
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: prNumber,
+              body: 'Launched /test (tests + coverage). Result will be in Checks and Artifacts.'
+            });
+            core.setOutput('check_id', check.data.id);
+            core.setOutput('head_sha', headSha);
+
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ github.event.issue.number }}/head
 
       - name: Install dependencies
         run: |
@@ -23,3 +63,107 @@ jobs:
         with:
           name: coverage-report
           path: build/coverage-report
+
+      - name: Mark test check success
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.checks.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              check_run_id: Number('${{ steps.test_check.outputs.check_id }}'),
+              status: 'completed',
+              conclusion: 'success',
+              completed_at: new Date().toISOString()
+            });
+
+      - name: Mark test check failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.checks.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              check_run_id: Number('${{ steps.test_check.outputs.check_id }}'),
+              status: 'completed',
+              conclusion: 'failure',
+              completed_at: new Date().toISOString()
+            });
+
+  build-docs:
+    if: >-
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '/docs')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Acknowledge docs run
+        id: docs_check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = context.payload.issue.number;
+            const pr = await github.rest.pulls.get({ owner, repo, pull_number: prNumber });
+            const headSha = pr.data.head.sha;
+            const check = await github.rest.checks.create({
+              owner,
+              repo,
+              name: 'PR comment /docs',
+              head_sha: headSha,
+              status: 'in_progress',
+              started_at: new Date().toISOString()
+            });
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: prNumber,
+              body: 'Launched /docs (documentation build). Result will be in Checks and Artifacts.'
+            });
+            core.setOutput('check_id', check.data.id);
+            core.setOutput('head_sha', headSha);
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ github.event.issue.number }}/head
+
+      - name: Build documentation
+        run: |
+          make build-docs
+
+      - name: Upload documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: build/docs/html
+
+      - name: Mark docs check success
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.checks.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              check_run_id: Number('${{ steps.docs_check.outputs.check_id }}'),
+              status: 'completed',
+              conclusion: 'success',
+              completed_at: new Date().toISOString()
+            });
+
+      - name: Mark docs check failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.checks.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              check_run_id: Number('${{ steps.docs_check.outputs.check_id }}'),
+              status: 'completed',
+              conclusion: 'failure',
+              completed_at: new Date().toISOString()
+            });
