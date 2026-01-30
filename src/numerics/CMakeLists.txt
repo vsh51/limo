@@ -1,5 +1,5 @@
 add_library(limo_numerics
-    src/Matrix.cpp
+    include/limo/numerics/Matrix.hpp
     src/Fraction.cpp
 )
 

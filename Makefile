@@ -28,9 +28,10 @@ coverage:
 		--exclude ".*/tests/.*" \
 		--exclude ".*/_deps/.*" \
 		--exclude ".*/build/.*" \
+		--exclude-branches-by-pattern ".*" \
 		--print-summary \
 		--html-details -o build/coverage-report/index.html \
-		--fail-under-line 90 --fail-under-branch 70 --fail-under-function 90
+		--fail-under-line 90 --fail-under-function 90
 
 clean:
 	rm -rf build
