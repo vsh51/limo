@@ -12,3 +12,5 @@ target_link_libraries(limo_basis_big_m
         limo_core
         limo_numerics
 )
+
+add_subdirectory(tests)
