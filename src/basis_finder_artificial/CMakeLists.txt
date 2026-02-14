@@ -12,3 +12,7 @@ target_link_libraries(limo_basis_artificial
         limo_core
         limo_numerics
 )
+
+if(LIMO_BUILD_TESTS)
+    add_subdirectory(tests)
+endif()
