@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "limo/basis/ArtificialBasisFinder.hpp"
+#include "limo/core/Result.hpp"
 #include "limo/core/LinearProgram.hpp"
 #include "limo/numerics/Fraction.hpp"
 

@@ -2,6 +2,7 @@
 #include <vector>
 
 #include "limo/basis/BigMBasisFinder.hpp"
+#include "limo/core/Result.hpp"
 #include "limo/numerics/Fraction.hpp"
 #include "limo/core/LinearProgram.hpp"
 

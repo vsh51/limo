@@ -3,7 +3,8 @@
 #include <cstddef>
 #include <vector>
 
-#include "limo/core/LinearProgram.hpp"
+#include <limo/basis/basis_finder.hpp>
+#include <limo/core/LinearProgram.hpp>
 
 namespace limo::basis {
 
@@ -36,25 +37,12 @@ namespace limo::basis {
  *
  * @author Yelyzaveta Chepurna
  */
-class ArtificialBasisFinder {
+class ArtificialBasisFinder : public BasisFinder {
 public:
-    using LinearProgram = limo::core::LinearProgram;
-    using value_type = LinearProgram::value_type;
-    using Matrix = LinearProgram::Matrix;
-    using ConstraintSense = LinearProgram::ConstraintSense;
-    using ObjectiveSense = LinearProgram::ObjectiveSense;
-
-    struct Result {
-        LinearProgram augmented;
-        std::vector<std::size_t> basisColumns;
-        std::vector<std::size_t> slackColumns;
-        std::vector<std::size_t> surplusColumns;
-        std::vector<std::size_t> artificialColumns;
-        std::size_t originalVariableCount = 0;
-    };
+    using Result = limo::core::Result;
 
     ArtificialBasisFinder() = default;
-    Result build(const LinearProgram& linearProgram) const;
+    Result build(const limo::core::LinearProgram& linearProgram) const override;
 };
 
 } // namespace limo::basis

@@ -1,8 +1,11 @@
 #include "limo/basis/ArtificialBasisFinder.hpp"
+#include <limo/core/LinearProgram.hpp>
 
 namespace limo::basis {
 
-ArtificialBasisFinder::Result ArtificialBasisFinder::build(const LinearProgram& linearProgram) const {
+using limo::core::Result;
+
+Result ArtificialBasisFinder::build(const limo::core::LinearProgram& linearProgram) const {
 	if (linearProgram.empty()) {
 		return Result{};
 	}
@@ -19,26 +22,26 @@ ArtificialBasisFinder::Result ArtificialBasisFinder::build(const LinearProgram& 
 
 	// Account for RHS signs: if RHS < 0, the constraint is effectively flipped
 	for (std::size_t r = 0; r < rows; ++r) {
-		value_type rhs = originalRhs[r];
+		limo::core::LinearProgram::value_type rhs = originalRhs[r];
 		auto sense = originalSense[r];
 
-		if (rhs < value_type{0}) {
-			if (sense == ConstraintSense::LessEqual) {
-				sense = ConstraintSense::GreaterEqual;
-			} else if (sense == ConstraintSense::GreaterEqual) {
-				sense = ConstraintSense::LessEqual;
+		if (rhs < limo::core::LinearProgram::value_type{0}) {
+			if (sense == limo::core::LinearProgram::ConstraintSense::LessEqual) {
+				sense = limo::core::LinearProgram::ConstraintSense::GreaterEqual;
+			} else if (sense == limo::core::LinearProgram::ConstraintSense::GreaterEqual) {
+				sense = limo::core::LinearProgram::ConstraintSense::LessEqual;
 			}
 		}
 
 		switch (sense) {
-			case ConstraintSense::LessEqual:
+			case limo::core::LinearProgram::ConstraintSense::LessEqual:
 				numSlack++;
 				break;
-			case ConstraintSense::GreaterEqual:
+			case limo::core::LinearProgram::ConstraintSense::GreaterEqual:
 				numSurplus++;
 				numArtificial++;
 				break;
-			case ConstraintSense::Equal:
+			case limo::core::LinearProgram::ConstraintSense::Equal:
 				numArtificial++;
 				break;
 		}
