@@ -16,6 +16,7 @@ add_subdirectory(basis_finder)
 add_subdirectory(basis_finder/tests)
 add_subdirectory(simplex)
 add_subdirectory(analysis)
+add_subdirectory(io)
 
 if(LIMO_BUILD_CLI)
     add_subdirectory(cli)
