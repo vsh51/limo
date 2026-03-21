@@ -15,3 +15,7 @@ target_include_directories(basis_finder PUBLIC
 )
 
 target_link_libraries(basis_finder PUBLIC limo_core)
+
+if(LIMO_BUILD_TESTS)
+    add_subdirectory(tests)
+endif()
