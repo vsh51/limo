@@ -20,8 +20,9 @@ if(LIMO_ENABLE_COVERAGE)
 	endif()
 endif()
 
+include(FetchContent)
+
 if(LIMO_BUILD_TESTS)
-	include(FetchContent)
 	FetchContent_Declare(
 		googletest
 		URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
@@ -36,6 +37,13 @@ if(LIMO_BUILD_TESTS)
 		COMMENT "Building and running unit tests"
 	)
 endif()
+
+FetchContent_Declare(
+	nlohmann_json
+	URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
+	DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+FetchContent_MakeAvailable(nlohmann_json)
 
 if(LIMO_BUILD_DOCS)
 	find_package(Doxygen QUIET)

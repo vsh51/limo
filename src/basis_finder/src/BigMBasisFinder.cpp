@@ -1,10 +1,18 @@
 #include "limo/basis/BigMBasisFinder.hpp"
+#include <limo/core/LinearProgram.hpp>
+#include <stdexcept>
 
 namespace limo::basis {
 
-BigMBasisFinder::Result BigMBasisFinder::build(
-    const LinearProgram& linearProgram,
-    const value_type& bigM) const {
+using limo::core::Result;
+
+Result BigMBasisFinder::build(const limo::core::LinearProgram& linearProgram) const {
+    throw std::logic_error("BigMBasisFinder requires bigM parameter. Use build(linearProgram, bigM).");
+}
+
+Result BigMBasisFinder::build(
+    const limo::core::LinearProgram& linearProgram,
+    const limo::core::LinearProgram::value_type& bigM) const {
     if (linearProgram.empty()) {
         return Result{};
     }

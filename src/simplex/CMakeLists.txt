@@ -12,6 +12,10 @@ target_link_libraries(limo_simplex
     PUBLIC
         limo_core
         limo_numerics
-        limo_basis_artificial
-        limo_basis_big_m
+        basis_finder
+        limo_io
 )
+
+if(LIMO_BUILD_TESTS)
+    add_subdirectory(tests)
+endif()

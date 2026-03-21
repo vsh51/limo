@@ -1,4 +1,4 @@
-.PHONY: build build-debug build-release build-docs test coverage clean
+.PHONY: build build-debug build-release build-docs test coverage integration-test clean
 
 BUILD_TYPE ?= Debug
 CMAKE_FLAGS ?=
@@ -32,6 +32,9 @@ coverage:
 		--print-summary \
 		--html-details -o build/coverage-report/index.html \
 		--fail-under-line 90 --fail-under-function 90
+
+integration-test:
+	python3 -m pytest tests/integration/ -v
 
 clean:
 	rm -rf build
