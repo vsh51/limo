@@ -9,11 +9,10 @@ void Fraction::normalize() {
         num = -num;
         denom = -denom;
     }
-    int a = std::abs(num);
-    int b = std::abs(denom);
-    int temp;
+    int64_t a = std::abs(num);
+    int64_t b = std::abs(denom);
     while (b != 0) {
-        temp = b;
+        int64_t temp = b;
         b = a % b;
         a = temp;
     }

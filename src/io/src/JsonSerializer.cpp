@@ -19,8 +19,8 @@ void adl_serializer<Fraction>::to_json(json& j, const Fraction& f) {
 }
 
 void adl_serializer<Fraction>::from_json(const json& j, Fraction& f) {
-    int num = j.at("num").get<int>();
-    int den = j.at("den").get<int>();
+    int64_t num = j.at("num").get<int64_t>();
+    int64_t den = j.at("den").get<int64_t>();
     if (den == 0) {
         throw std::invalid_argument("Fraction denominator cannot be zero");
     }
@@ -143,6 +143,7 @@ void adl_serializer<Result>::from_json(const json& j, Result& r) {
 
 void adl_serializer<Tableau>::to_json(json& j, const Tableau& t) {
     j["iterationNumber"] = t.iterationNumber;
+    j["phase"] = t.phase;
     j["tableau"] = t.tableau;
     j["basisVariables"] = t.basisVariables;
     j["pivotRow"] = t.pivotRow.has_value() ? json(t.pivotRow.value()) : json(nullptr);
@@ -158,6 +159,7 @@ void adl_serializer<Tableau>::to_json(json& j, const Tableau& t) {
 
 void adl_serializer<Tableau>::from_json(const json& j, Tableau& t) {
     t.iterationNumber = j.at("iterationNumber").get<std::size_t>();
+    t.phase           = j.value("phase", 0);
     t.tableau         = j.at("tableau").get<Matrix>();
     t.basisVariables  = j.at("basisVariables").get<std::vector<std::size_t>>();
 

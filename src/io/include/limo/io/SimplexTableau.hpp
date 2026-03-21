@@ -19,6 +19,7 @@ namespace limo::io {
  */
 struct SimplexTableau {
     std::size_t iterationNumber;
+    int phase = 0;
     limo::numerics::Matrix<limo::numerics::fraction::Fraction> tableau;
     std::vector<std::size_t> basisVariables;
     std::optional<std::size_t> pivotRow;

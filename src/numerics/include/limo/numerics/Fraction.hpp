@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 namespace limo::numerics::fraction {
 
 /**
@@ -13,13 +15,13 @@ namespace limo::numerics::fraction {
  */
 class Fraction {
 public:
-    Fraction(int numerator = 0, int denominator = 1) : num(numerator), denom(denominator) {}
+    Fraction(int64_t numerator = 0, int64_t denominator = 1) : num(numerator), denom(denominator) { normalize(); }
 
     void normalize();
     double toDouble() const;
 
-    int getNumerator() const { return num; }
-    int getDenominator() const { return denom; }
+    int64_t getNumerator() const { return num; }
+    int64_t getDenominator() const { return denom; }
 
     Fraction operator+(const Fraction& other) const;
     Fraction operator-(const Fraction& other) const;
@@ -33,8 +35,8 @@ public:
     bool operator>=(const Fraction& other) const;
 
 private:
-    int num;
-    int denom;
+    int64_t num;
+    int64_t denom;
 };
 
 } // namespace limo::numerics::fraction

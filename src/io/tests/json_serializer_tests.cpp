@@ -212,6 +212,7 @@ TEST(ResultSerializer, RoundTrip) {
 TEST(SimplexTableauSerializer, RoundTrip) {
     SimplexTableau original;
     original.iterationNumber = 2;
+    original.phase = 1;
     original.tableau = Matrix<Fraction>(1, 2);
     original.tableau(0, 0) = Fraction{1};
     original.tableau(0, 1) = Fraction{2};
@@ -225,6 +226,7 @@ TEST(SimplexTableauSerializer, RoundTrip) {
     auto restored = j.get<SimplexTableau>();
 
     EXPECT_EQ(restored.iterationNumber, 2);
+    EXPECT_EQ(restored.phase, 1);
     EXPECT_EQ(restored.tableau(0, 0), Fraction(1));
     EXPECT_EQ(restored.tableau(0, 1), Fraction(2));
     EXPECT_EQ(restored.basisVariables, original.basisVariables);
@@ -239,6 +241,7 @@ TEST(SimplexTableauSerializer, RoundTrip) {
 TEST(SimplexTableauSerializer, NullOptionals) {
     SimplexTableau original;
     original.iterationNumber = 0;
+    original.phase = 2;
     original.tableau = Matrix<Fraction>(1, 1);
     original.tableau(0, 0) = Fraction{1};
     original.basisVariables = {0};

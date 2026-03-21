@@ -60,6 +60,7 @@ static Matrix buildTableau(
 
 static limo::io::SimplexTableau makeSnapshot(
     std::size_t iterNum,
+    int phase,
     const Matrix& tableau,
     const std::vector<std::size_t>& basis,
     std::optional<std::size_t> pivotRow,
@@ -70,16 +71,18 @@ static limo::io::SimplexTableau makeSnapshot(
     const auto m = basis.size();
     const auto n = tableau.cols() - 1;
 
-    Matrix constraintPart(m, n + 1, Fraction{0});
-    for (std::size_t r = 0; r < m; ++r) {
+    // Include all rows: m constraint rows + 1 objective row
+    Matrix fullTableau(m + 1, n + 1, Fraction{0});
+    for (std::size_t r = 0; r <= m; ++r) {
         for (std::size_t c = 0; c <= n; ++c) {
-            constraintPart(r, c) = tableau(r, c);
+            fullTableau(r, c) = tableau(r, c);
         }
     }
 
     return limo::io::SimplexTableau{
         iterNum,
-        std::move(constraintPart),
+        phase,
+        std::move(fullTableau),
         basis,
         pivotRow,
         pivotCol,
@@ -143,7 +146,7 @@ SimplexSolver::SolveResult SimplexSolver::solve(
             Fraction z = Fraction{0} - tableau(m, n);
             if (negate) z = Fraction{0} - z;
             observer->onIteration(makeSnapshot(
-                iterNum, tableau, basis,
+                iterNum, phaseNumber, tableau, basis,
                 *leavingRow, *enteringCol,
                 z, ratios));
         }
@@ -176,7 +179,7 @@ SimplexSolver::SolveResult SimplexSolver::solve(
     if (observer) {
         std::vector<std::optional<Fraction>> noRatios(m, std::nullopt);
         observer->onPhaseComplete(phaseNumber, makeSnapshot(
-            iterNum, tableau, basis,
+            iterNum, phaseNumber, tableau, basis,
             std::nullopt, std::nullopt,
             objVal, noRatios));
     }
