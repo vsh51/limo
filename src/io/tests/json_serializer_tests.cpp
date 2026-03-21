@@ -7,11 +7,13 @@
 #include "limo/numerics/Matrix.hpp"
 #include "limo/core/LinearProgram.hpp"
 #include "limo/core/Result.hpp"
+#include "limo/core/Solution.hpp"
 
 using limo::numerics::fraction::Fraction;
 using limo::numerics::Matrix;
 using limo::core::LinearProgram;
 using limo::core::Result;
+using limo::core::Solution;
 using limo::io::SimplexTableau;
 using nlohmann::json;
 
@@ -252,4 +254,69 @@ TEST(SimplexTableauSerializer, NullOptionals) {
     auto restored = j.get<SimplexTableau>();
     EXPECT_EQ(restored.pivotRow, std::nullopt);
     EXPECT_EQ(restored.pivotColumn, std::nullopt);
+}
+
+// --- Solution ---
+
+TEST(SolutionSerializer, ToJsonOptimal) {
+    Solution s;
+    s.status = Solution::Status::Optimal;
+    s.objectiveValue = Fraction{42};
+    s.variableValues = {Fraction{3}, Fraction{7}};
+
+    json j = s;
+    EXPECT_EQ(j["status"], "optimal");
+    EXPECT_EQ(j["objectiveValue"]["num"], 42);
+    EXPECT_EQ(j["variableValues"].size(), 2u);
+}
+
+TEST(SolutionSerializer, ToJsonInfeasible) {
+    Solution s;
+    s.status = Solution::Status::Infeasible;
+    json j = s;
+    EXPECT_EQ(j["status"], "infeasible");
+}
+
+TEST(SolutionSerializer, ToJsonUnbounded) {
+    Solution s;
+    s.status = Solution::Status::Unbounded;
+    json j = s;
+    EXPECT_EQ(j["status"], "unbounded");
+}
+
+TEST(SolutionSerializer, RoundTripOptimal) {
+    Solution original;
+    original.status = Solution::Status::Optimal;
+    original.objectiveValue = Fraction{10, 3};
+    original.variableValues = {Fraction{1}, Fraction{2}};
+
+    json j = original;
+    auto restored = j.get<Solution>();
+
+    EXPECT_EQ(restored.status, Solution::Status::Optimal);
+    EXPECT_EQ(restored.objectiveValue, Fraction(10, 3));
+    ASSERT_EQ(restored.variableValues.size(), 2u);
+    EXPECT_EQ(restored.variableValues[0], Fraction(1));
+    EXPECT_EQ(restored.variableValues[1], Fraction(2));
+}
+
+TEST(SolutionSerializer, RoundTripInfeasible) {
+    Solution original;
+    original.status = Solution::Status::Infeasible;
+    json j = original;
+    auto restored = j.get<Solution>();
+    EXPECT_EQ(restored.status, Solution::Status::Infeasible);
+}
+
+TEST(SolutionSerializer, RoundTripUnbounded) {
+    Solution original;
+    original.status = Solution::Status::Unbounded;
+    json j = original;
+    auto restored = j.get<Solution>();
+    EXPECT_EQ(restored.status, Solution::Status::Unbounded);
+}
+
+TEST(SolutionSerializer, InvalidStatusThrows) {
+    json j = {{"status", "broken"}, {"objectiveValue", {{"num", 0}, {"den", 1}}}, {"variableValues", json::array()}};
+    EXPECT_THROW(j.get<Solution>(), std::invalid_argument);
 }

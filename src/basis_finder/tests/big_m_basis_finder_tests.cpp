@@ -229,6 +229,32 @@ TEST_F(BigMBasisFinderTest, ComplexMix) {
     EXPECT_TRUE(isObjCoeff(result.augmented, 3, Fraction{0})); // Surplus has 0 cost
 }
 
+TEST_F(BigMBasisFinderTest, NoBigMParameterThrows) {
+    LinearProgram::Matrix matrix(1, 1);
+    matrix(0, 0) = Fraction{1};
+    std::vector<Fraction> rhs = { Fraction{5} };
+    std::vector<Fraction> obj = { Fraction{1} };
+    std::vector<LinearProgram::ConstraintSense> sense = { LinearProgram::ConstraintSense::LessEqual };
+    LinearProgram lp(matrix, rhs, obj, LinearProgram::ObjectiveSense::Minimize, sense);
+
+    BigMBasisFinder finder;
+    EXPECT_THROW(finder.build(lp), std::logic_error);
+}
+
+TEST_F(BigMBasisFinderTest, EmptyLPReturnsEmptyResult) {
+    LinearProgram lp;
+    BigMBasisFinder finder;
+    Fraction bigM{1000};
+    auto result = finder.build(lp, bigM);
+
+    EXPECT_EQ(result.originalVariableCount, 0u);
+    EXPECT_TRUE(result.basisColumns.empty());
+    EXPECT_TRUE(result.slackColumns.empty());
+    EXPECT_TRUE(result.surplusColumns.empty());
+    EXPECT_TRUE(result.artificialColumns.empty());
+    EXPECT_TRUE(result.augmented.constraintMatrix().empty());
+}
+
 TEST_F(BigMBasisFinderTest, MockLP) {
     // Minimize Z = x1 - x2 + 3x3
     // subject to:

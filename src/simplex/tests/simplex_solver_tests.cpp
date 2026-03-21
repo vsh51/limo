@@ -6,6 +6,7 @@
 #include "limo/core/LinearProgram.hpp"
 #include "limo/numerics/Fraction.hpp"
 #include "limo/numerics/Matrix.hpp"
+#include "limo/io/SolverObserver.hpp"
 
 using Fraction = limo::numerics::fraction::Fraction;
 using Matrix   = limo::numerics::Matrix<Fraction>;
@@ -14,6 +15,20 @@ using Solver   = limo::simplex::SimplexSolver;
 using Status   = Solver::SolveStatus;
 
 namespace {
+
+struct RecordingObserver : limo::io::SolverObserver {
+    int iterationCount = 0;
+    int phaseCompleteCount = 0;
+    int solveCompleteCount = 0;
+    int lastPhase = -1;
+
+    void onIteration(const limo::io::SimplexTableau&) override { ++iterationCount; }
+    void onPhaseComplete(int phase, const limo::io::SimplexTableau&) override {
+        ++phaseCompleteCount;
+        lastPhase = phase;
+    }
+    void onSolveComplete() override { ++solveCompleteCount; }
+};
 
 LP makeLP(
     std::initializer_list<std::initializer_list<Fraction>> a,
@@ -49,6 +64,16 @@ LP makeMinLP() {
         LP::ObjectiveSense::Minimize,
         {LP::ConstraintSense::GreaterEqual,
          LP::ConstraintSense::GreaterEqual});
+}
+
+// max x1 + x2  s.t.  x1 - x2 <= 0  →  unbounded (x1 = x2 can grow without bound)
+LP makeUnboundedLP() {
+    return makeLP(
+        {{1, -1}},
+        {0},
+        {1, 1},
+        LP::ObjectiveSense::Maximize,
+        {LP::ConstraintSense::LessEqual});
 }
 
 // infeasible: x1+x2<=4 AND x1+x2>=6
@@ -96,6 +121,45 @@ TEST_F(SimplexSolverBigMTest, DetectsInfeasible) {
     auto result = finder_.build(lp, bigM_);
     auto sr = solver_.solve(result.augmented, result.basisColumns);
     (void)sr;
+}
+
+TEST_F(SimplexSolverBigMTest, DetectsUnbounded) {
+    auto lp = makeUnboundedLP();
+    auto result = finder_.build(lp, bigM_);
+    auto sr = solver_.solve(result.augmented, result.basisColumns);
+
+    EXPECT_EQ(sr.status, Status::Unbounded);
+}
+
+TEST_F(SimplexSolverBigMTest, ObserverReceivesCallbacks) {
+    // max x1 s.t. x1 <= 5 — one pivot needed
+    auto lp = makeLP(
+        {{1}},
+        {5},
+        {1},
+        LP::ObjectiveSense::Maximize,
+        {LP::ConstraintSense::LessEqual});
+
+    auto result = finder_.build(lp, bigM_);
+    RecordingObserver obs;
+    auto sr = solver_.solve(result.augmented, result.basisColumns, &obs, 1);
+
+    EXPECT_EQ(sr.status, Status::Optimal);
+    EXPECT_GT(obs.iterationCount, 0);
+    EXPECT_EQ(obs.phaseCompleteCount, 1);
+    EXPECT_EQ(obs.lastPhase, 1);
+    EXPECT_EQ(obs.solveCompleteCount, 0);
+}
+
+TEST_F(SimplexSolverBigMTest, ObserverCalledOnUnbounded) {
+    auto lp = makeUnboundedLP();
+    auto result = finder_.build(lp, bigM_);
+    RecordingObserver obs;
+    auto sr = solver_.solve(result.augmented, result.basisColumns, &obs);
+
+    EXPECT_EQ(sr.status, Status::Unbounded);
+    EXPECT_EQ(obs.solveCompleteCount, 1);
+    EXPECT_EQ(obs.phaseCompleteCount, 0);
 }
 
 class SimplexSolverArtificialTest : public ::testing::Test {
