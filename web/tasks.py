@@ -14,17 +14,13 @@ Progress states emitted during task execution
 """
 
 import json
-import os
 import subprocess
 import time
 
 from celery import Celery
 
-REDIS_URL   = os.environ.get("REDIS_URL",   "redis://localhost:6379/0")
-LIMO_BINARY = os.environ.get("LIMO_BINARY", "./build/bin/limo")
+from web.config import CELERY_RESULT_EXPIRES, LIMO_BINARY, REDIS_URL, SOLVER_TIMEOUT
 
-# One Celery application shared by both the Flask server (to dispatch tasks)
-# and the worker processes (to execute tasks).
 celery_app = Celery(
     "limo_tasks",
     broker=REDIS_URL,
@@ -35,9 +31,9 @@ celery_app.conf.update(
     task_serializer="json",
     result_serializer="json",
     accept_content=["json"],
-    result_expires=3600,           # keep results in Redis for 1 hour
-    task_track_started=True,       # STARTED state is reported while running
-    worker_prefetch_multiplier=1,  # each worker takes one task at a time
+    result_expires=CELERY_RESULT_EXPIRES,
+    task_track_started=True,
+    worker_prefetch_multiplier=1,
     broker_connection_retry_on_startup=True,
     broker_transport_options={
         "socket_timeout": 5,
@@ -58,13 +54,12 @@ celery_app.conf.update(
 def solve_task(self, limo_input: dict) -> dict:
     """Run the limo binary on *limo_input* and return the raw solver output.
 
-    The task is executed by a Celery worker process.  The result (or any
+    The task is executed by a Celery worker process. The result (or any
     exception) is stored in Redis and retrieved by the Flask server via
     GET /api/result/<task_id>.
     """
     started_at = time.time()
 
-    # ── Step 1: launch the solver process ────────────────────────────────────
     self.update_state(
         state="PROGRESS",
         meta={"step": "starting", "started_at": started_at},
@@ -84,7 +79,6 @@ def solve_task(self, limo_input: dict) -> dict:
             "Make sure the Docker image was built correctly."
         )
 
-    # ── Step 2: feed input and wait for result ────────────────────────────────
     self.update_state(
         state="PROGRESS",
         meta={"step": "solving", "started_at": started_at},
@@ -93,12 +87,12 @@ def solve_task(self, limo_input: dict) -> dict:
     try:
         stdout, stderr = proc.communicate(
             input=json.dumps(limo_input),
-            timeout=300,
+            timeout=SOLVER_TIMEOUT,
         )
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.communicate()
-        raise RuntimeError("Solver timed out (300 s limit)")
+        raise RuntimeError(f"Solver timed out ({SOLVER_TIMEOUT}s limit)")
 
     if proc.returncode != 0 and not stdout.strip():
         raise RuntimeError(stderr or "Solver process crashed")

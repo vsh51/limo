@@ -2,12 +2,19 @@
 # Needs the Docker CLI to run "docker compose up --scale worker=N".
 FROM python:3.12-alpine
 
-RUN apk add --no-cache docker-cli
+LABEL org.opencontainers.image.title="LIMO Autoscaler" \
+      org.opencontainers.image.description="Queue-depth autoscaler for LIMO Celery workers"
 
-RUN pip install --no-cache-dir "redis>=5.0"
+RUN apk add --no-cache docker-cli \
+    && pip install --no-cache-dir "redis>=5.0"
+
+RUN adduser -D -u 1000 limo
 
 WORKDIR /app
 COPY web/autoscaler.py ./autoscaler.py
+
+# Autoscaler needs Docker socket access, so it runs as root by default.
+# Override USER in docker-compose if the socket is group-accessible.
 
 ENV PYTHONUNBUFFERED=1
 

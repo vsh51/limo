@@ -1,7 +1,44 @@
+# Build artifacts
 build/
+CMakeFiles/
+cmake_install.cmake
+
+# IDE / editor
+.vs/
 .vscode/
+.idea/
+*.user
+*.swp
+*~
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+
+# Test output / coverage
+*.gcov
+*.gcda
+*.gcno
+coverage/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
 *.log
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml

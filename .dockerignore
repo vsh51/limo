@@ -1,4 +1,4 @@
-# Build artefacts
+# Build artifacts
 build/
 CMakeFiles/
 *.cmake
@@ -28,16 +28,27 @@ doc/
 docs/
 Doxyfile.in
 
-# Test output / coverage data
+# Test output / coverage
 *.gcov
 *.gcda
 *.gcno
 coverage/
 
-# OS artefacts
+# OS artifacts
 .DS_Store
 Thumbs.db
+
+# Environment & config
+.env
+.env.*
+!.env.example
 
 # Temporary files
 *.tmp
 *.log
+
+# Not needed in container
+tests/
+Makefile
+README.md
+LICENSE
