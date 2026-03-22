@@ -1,0 +1,43 @@
+# Build artefacts
+build/
+CMakeFiles/
+*.cmake
+cmake_install.cmake
+
+# Version control
+.git/
+.github/
+
+# IDE / editor
+.vs/
+.idea/
+*.user
+.vscode/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Documentation
+doc/
+docs/
+Doxyfile.in
+
+# Test output / coverage data
+*.gcov
+*.gcda
+*.gcno
+coverage/
+
+# OS artefacts
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.log

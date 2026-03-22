@@ -1,0 +1,12 @@
+{
+  "objective": {
+    "sense": "maximize",
+    "coefficients": ["30", "20"]
+  },
+  "constraints": [
+    { "coefficients": ["2", "1"], "sense": "<=", "rhs": "100" },
+    { "coefficients": ["1", "1"], "sense": "<=", "rhs": "80"  },
+    { "coefficients": ["1", "0"], "sense": "<=", "rhs": "40"  }
+  ],
+  "basisMethod": "big-m"
+}

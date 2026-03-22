@@ -4,6 +4,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "limo/io/FileParser.hpp"
 #include "limo/io/InputParser.hpp"
 #include "limo/io/OutputBuilder.hpp"
 #include "limo/io/IterationCollector.hpp"
@@ -15,6 +16,41 @@ using Fraction    = limo::numerics::fraction::Fraction;
 using LP          = limo::core::LinearProgram;
 using Solution    = limo::core::Solution;
 using SolveStatus = limo::simplex::SimplexSolver::SolveStatus;
+
+// ── Argument parsing ──────────────────────────────────────────────────────────
+
+struct CliArgs {
+    std::string format    = "json";   // json | csv | txt
+    bool        parseOnly = false;    // --parse-only: echo parsed LP, skip solver
+};
+
+static CliArgs parseArgs(int argc, char* argv[]) {
+    CliArgs args;
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--format" && i + 1 < argc) {
+            args.format = argv[++i];
+        } else if (arg == "--parse-only") {
+            args.parseOnly = true;
+        }
+    }
+    if (args.format != "json" && args.format != "csv" && args.format != "txt") {
+        throw std::invalid_argument(
+            "Unknown format '" + args.format + "'. Use: json, csv, or txt");
+    }
+    return args;
+}
+
+// ── Input parsing ─────────────────────────────────────────────────────────────
+
+static limo::io::ParsedInput parseInput(const std::string& content,
+                                         const std::string& format) {
+    if (format == "csv") return limo::io::FileParser::parseCSV(content);
+    if (format == "txt") return limo::io::FileParser::parseTXT(content);
+    return limo::io::InputParser::parse(content);
+}
+
+// ── Solver helpers ────────────────────────────────────────────────────────────
 
 static Solution makeSolution(
     const limo::simplex::SimplexSolver::SolveResult& sr,
@@ -55,8 +91,6 @@ static Solution solveTwoPhase(
         return {Solution::Status::Infeasible, {}, {}};
     }
 
-    // Phase-2 LP: drop artificial columns (they are the last nArt columns by
-    // construction of both basis finders).
     const std::size_t nAug    = basisResult.augmented.cols();
     const std::size_t nPhase2 = nAug - basisResult.artificialColumns.size();
     const std::size_t m       = basisResult.augmented.rows();
@@ -115,10 +149,21 @@ static Solution solveBigM(
     return makeSolution(sr, basisResult.originalVariableCount);
 }
 
-int main() {
+// ── Entry point ───────────────────────────────────────────────────────────────
+
+int main(int argc, char* argv[]) {
     try {
-        std::string input(std::istreambuf_iterator<char>(std::cin), {});
-        auto [lp, config] = limo::io::InputParser::parse(input);
+        const CliArgs args = parseArgs(argc, argv);
+
+        const std::string input(std::istreambuf_iterator<char>(std::cin), {});
+        auto [lp, config] = parseInput(input, args.format);
+
+        // --parse-only: output the parsed problem and exit without solving
+        if (args.parseOnly) {
+            auto output = limo::io::OutputBuilder::buildParsedInput(lp, config);
+            std::cout << output.dump() << '\n';
+            return 0;
+        }
 
         limo::core::Result basisResult;
         if (config.basisMethod == "artificial") {

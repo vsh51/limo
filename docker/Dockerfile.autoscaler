@@ -1,0 +1,14 @@
+# Lightweight image for the queue-depth autoscaler.
+# Needs the Docker CLI to run "docker compose up --scale worker=N".
+FROM python:3.12-alpine
+
+RUN apk add --no-cache docker-cli
+
+RUN pip install --no-cache-dir "redis>=5.0"
+
+WORKDIR /app
+COPY web/autoscaler.py ./autoscaler.py
+
+ENV PYTHONUNBUFFERED=1
+
+CMD ["python", "autoscaler.py"]
