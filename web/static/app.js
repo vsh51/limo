@@ -20,10 +20,66 @@
   let lastResult = null;
 
   // Task queue state
-  let tasks = [];          // { id, num, state, result, error, submittedAt, label }
+  // Each task: { id, num, state, result, error, submittedAt, startedAt, finishedAt, label, payload }
+  let tasks = [];
   let taskCounter = 0;
   let selectedTaskId = null;
+  let selectedTab = 'solution';
   let _elapsedTimer = null;
+
+  // Large problem threshold — above these, form is hidden, file-only mode
+  const MAX_FORM_VARS = 6;
+  const MAX_FORM_CONS = 10;
+
+  // Task history limit
+  const MAX_TASKS = 15;
+  const STORAGE_KEY = 'limo_tasks';
+  const COUNTER_KEY = 'limo_task_counter';
+
+  // ── LocalStorage persistence ──
+
+  function saveTasks() {
+    try {
+      const serializable = tasks.map(t => ({
+        id: t.id, num: t.num, state: t.state,
+        error: t.error || null,
+        submittedAt: t.submittedAt, startedAt: t.startedAt || null,
+        finishedAt: t.finishedAt || null,
+        label: t.label, payload: t.payload,
+        result: t.state === 'SUCCESS' ? t.result : null,
+      }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(serializable));
+      localStorage.setItem(COUNTER_KEY, String(taskCounter));
+    } catch { /* quota exceeded — silently ignore */ }
+  }
+
+  function loadTasks() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return;
+      tasks = parsed.map(t => ({
+        id: t.id, num: t.num, state: t.state,
+        result: t.result || null, error: t.error || null,
+        submittedAt: t.submittedAt, startedAt: t.startedAt || null,
+        finishedAt: t.finishedAt || null,
+        label: t.label, payload: t.payload,
+      }));
+      const saved = parseInt(localStorage.getItem(COUNTER_KEY), 10);
+      if (Number.isFinite(saved) && saved >= taskCounter) taskCounter = saved;
+
+      // Re-poll tasks that were active when page closed
+      for (const t of tasks) {
+        if (t.state === 'PENDING' || t.state === 'STARTED' || t.state === 'PROGRESS') {
+          startTaskPolling(t);
+        }
+      }
+      if (tasks.some(t => t.state === 'STARTED' || t.state === 'PROGRESS')) {
+        startElapsedTimer();
+      }
+    } catch { /* corrupt data — start fresh */ }
+  }
 
   // ── Examples ──
 
@@ -206,22 +262,16 @@
 
   function cap(s) { return s[0].toUpperCase() + s.slice(1); }
 
-  // ── Rendering: Solution ──
+  // ── Rendering: Result content ──
 
-  function showSolution(data) {
-    const card = $('solution-card');
-    const body = $('solution-body');
-    card.classList.remove('hidden');
-
+  function populateSolutionTab(el, data) {
     if (data.status === 'error') {
-      body.innerHTML = `<div class="error-banner">${esc(data.error)}</div>`;
+      el.innerHTML = `<div class="error-banner">${esc(data.error)}</div>`;
       return;
     }
-
     const sol = data.solution;
     const labels = { optimal: 'Optimal', infeasible: 'Infeasible', unbounded: 'Unbounded' };
     let h = `<div class="solution-status status-${sol.status}">${labels[sol.status] || sol.status}</div>`;
-
     if (sol.status === 'optimal') {
       h += '<div class="solution-details">';
       h += `<div class="solution-row"><span class="label">Objective Value</span><span class="value">${sol.objectiveValue}</span></div>`;
@@ -230,25 +280,36 @@
       });
       h += '</div>';
     }
-    body.innerHTML = h;
+    el.innerHTML = h;
   }
 
-  // ── Rendering: Iterations ──
+  function populateInputTab(el, payload) {
+    if (!payload) { el.innerHTML = ''; return; }
+    const sense = cap(payload.objective.sense);
+    const objExpr = payload.objective.coefficients
+      .map((c, i) => (c === '0' || c === '') ? null : `${c}${vn(i)}`)
+      .filter(Boolean).join(' + ') || '0';
+    let preview = `${sense}:  ${objExpr}\n\nSubject to:\n`;
+    payload.constraints.forEach(con => {
+      const sym = { '<=': '\u2264', '=': '=', '>=': '\u2265' }[con.sense] || con.sense;
+      const expr = con.coefficients
+        .map((c, i) => (c === '0' || c === '') ? null : `${c}${vn(i)}`)
+        .filter(Boolean).join(' + ') || '0';
+      preview += `  ${expr}  ${sym}  ${con.rhs}\n`;
+    });
+    const n = payload.objective.coefficients.length;
+    preview += `\n  ${Array.from({ length: n }, (_, i) => vn(i)).join(', ')} \u2265 0`;
+    el.innerHTML = `<pre class="task-inline-preview">${esc(preview)}</pre>`;
+  }
 
-  function showIterations(data) {
-    const card = $('iterations-card');
-    const body = $('iterations-body');
-
+  function populateIterationsTab(el, data) {
     if (data.status === 'error' || !data.iterations || !data.iterations.length) {
-      card.classList.add('hidden');
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:13px">No iteration data available.</div>';
       return;
     }
-    card.classList.remove('hidden');
 
     const bf = data.basisFinding.result;
     const colHeaders = buildColHeaders(bf);
-
-    // Detect phases using the phase field
     const phases = new Set(data.iterations.map(it => it.phase));
     const multiPhase = phases.size > 1;
 
@@ -260,7 +321,6 @@
         currentPhase = it.phase;
         html += `<div class="phase-separator">Phase ${currentPhase}</div>`;
       }
-
       const isFirst = idx === 0;
       const isLast = idx === data.iterations.length - 1;
 
@@ -276,7 +336,7 @@
       </div>`;
     });
 
-    body.innerHTML = html;
+    el.innerHTML = html;
   }
 
   function buildColHeaders(bf) {
@@ -354,72 +414,41 @@
     return h;
   }
 
-  // ── Queue status indicator ──
+  // ── Task count indicator ──
 
-  function updateQueueIndicator(depth) {
+  function updateTaskCountIndicator() {
     const dot   = $('queue-dot');
     const label = $('queue-label');
-    if (depth < 0) {
-      dot.className = 'queue-dot dot-unknown';
-      label.textContent = 'Queue: —';
-    } else if (depth === 0) {
-      dot.className = 'queue-dot dot-idle';
-      label.textContent = 'Queue: idle';
-    } else {
+    const count = tasks.length;
+    label.textContent = `Tasks: ${count} / ${MAX_TASKS}`;
+    if (count >= MAX_TASKS) {
       dot.className = 'queue-dot dot-busy';
-      label.textContent = `Queue: ${depth}`;
+    } else if (count > 0) {
+      dot.className = 'queue-dot dot-idle';
+    } else {
+      dot.className = 'queue-dot dot-unknown';
     }
   }
 
   function startQueuePolling() {
-    const poll = async () => {
-      try {
-        const r = await fetch('/api/status');
-        const d = await r.json();
-        updateQueueIndicator(d.queue_depth ?? -1);
-      } catch {
-        updateQueueIndicator(-1);
-      }
-    };
-    poll();
-    setInterval(poll, 5000);
-  }
-
-  function updateWorkersIndicator(count) {
-    const dot   = $('workers-dot');
-    const label = $('workers-label');
-    if (count < 0) {
-      dot.className     = 'status-dot wdot-unknown';
-      label.textContent = 'Workers: \u2014';
-    } else if (count === 0) {
-      dot.className     = 'status-dot wdot-idle';
-      label.textContent = 'Workers: 0';
-    } else {
-      dot.className     = 'status-dot wdot-active';
-      label.textContent = `Workers: ${count}`;
-    }
-  }
-
-  function startWorkersPolling() {
-    const poll = async () => {
-      try {
-        const r = await fetch('/api/workers');
-        const d = await r.json();
-        updateWorkersIndicator(d.count ?? -1);
-      } catch {
-        updateWorkersIndicator(-1);
-      }
-    };
-    poll();
-    setInterval(poll, 10000);
+    updateTaskCountIndicator();
   }
 
   // ── Task list ──
 
-  function formatElapsed(ms) {
-    const s = Math.floor(ms / 1000);
+  function formatElapsed(task) {
+    if (!task.startedAt) return null;
+    const end = task.finishedAt || Date.now();
+    const s = Math.floor((end - task.startedAt) / 1000);
     if (s < 60) return `${s}s`;
     return `${Math.floor(s / 60)}m ${s % 60}s`;
+  }
+
+  function isLargeProblem(task) {
+    if (!task.payload) return false;
+    const nVars = task.payload.objective.coefficients.length;
+    const nCons = task.payload.constraints.length;
+    return nVars > MAX_FORM_VARS || nCons > MAX_FORM_CONS;
   }
 
   function buildTaskLabel(payload) {
@@ -432,65 +461,8 @@
     return label.length > 38 ? label.slice(0, 35) + '…' : label;
   }
 
-  function renderInlineResult(t) {
-    const p   = t.payload;
-    const res = t.result;
-    let html  = '<div class="task-inline-result">';
-
-    // ── Input problem ──────────────────────────────────────────────────────
-    if (p) {
-      const sense = cap(p.objective.sense);
-      const objExpr = p.objective.coefficients
-        .map((c, i) => (c === '0' || c === '') ? null : `${c}${vn(i)}`)
-        .filter(Boolean).join(' + ') || '0';
-      let preview = `${sense}:  ${objExpr}\n\nSubject to:\n`;
-      p.constraints.forEach(con => {
-        const sym  = { '<=': '\u2264', '=': '=', '>=': '\u2265' }[con.sense] || con.sense;
-        const expr = con.coefficients
-          .map((c, i) => (c === '0' || c === '') ? null : `${c}${vn(i)}`)
-          .filter(Boolean).join(' + ') || '0';
-        preview += `  ${expr}  ${sym}  ${con.rhs}\n`;
-      });
-      const n = p.objective.coefficients.length;
-      preview += `\n  ${Array.from({ length: n }, (_, i) => vn(i)).join(', ')} \u2265 0`;
-      html += `<div class="task-inline-section">
-        <span class="task-inline-label">Input</span>
-        <pre class="task-inline-preview">${esc(preview)}</pre>
-      </div>`;
-    }
-
-    // ── Solution ───────────────────────────────────────────────────────────
-    if (res) {
-      if (res.status === 'error') {
-        html += `<div class="task-inline-section">
-          <span class="task-inline-label">Error</span>
-          <div class="error-banner">${esc(res.error)}</div>
-        </div>`;
-      } else if (res.solution) {
-        const sol = res.solution;
-        const sc  = { optimal: 'status-optimal', infeasible: 'status-infeasible', unbounded: 'status-unbounded' }[sol.status] || '';
-        const sl  = { optimal: 'Optimal', infeasible: 'Infeasible', unbounded: 'Unbounded' }[sol.status] || sol.status;
-        let solHtml = `<div class="solution-status ${sc}">${sl}</div>`;
-        if (sol.status === 'optimal') {
-          solHtml += '<div class="solution-details">';
-          solHtml += `<div class="solution-row"><span class="label">Objective Value</span><span class="value">${sol.objectiveValue}</span></div>`;
-          (sol.variableValues || []).forEach((v, i) => {
-            solHtml += `<div class="solution-row"><span class="label">${vn(i)}</span><span class="value">${v}</span></div>`;
-          });
-          solHtml += '</div>';
-        }
-        html += `<div class="task-inline-section">
-          <span class="task-inline-label">Solution</span>
-          ${solHtml}
-        </div>`;
-      }
-    }
-
-    html += '</div>';
-    return html;
-  }
-
   function renderTaskList() {
+    updateTaskCountIndicator();
     const card = $('tasks-card');
     const list = $('tasks-list');
     if (!tasks.length) {
@@ -500,16 +472,18 @@
     card.classList.remove('hidden');
 
     const STATE = {
-      PENDING:  { dot: 'dot-queued',  text: 'Queued'  },
-      STARTED:  { dot: 'dot-running', text: 'Running' },
-      PROGRESS: { dot: 'dot-running', text: 'Solving' },
-      SUCCESS:  { dot: 'dot-success', text: 'Done'    },
-      FAILURE:  { dot: 'dot-failure', text: 'Failed'  },
+      PENDING:  { dot: 'dot-queued',  text: 'Queued'    },
+      STARTED:  { dot: 'dot-running', text: 'Running'   },
+      PROGRESS: { dot: 'dot-running', text: 'Solving'   },
+      SUCCESS:  { dot: 'dot-success', text: 'Done'      },
+      FAILURE:  { dot: 'dot-failure', text: 'Failed'    },
+      REVOKED:  { dot: 'dot-failure', text: 'Cancelled' },
+      LOST:     { dot: 'dot-failure', text: 'Lost'      },
     };
 
     list.innerHTML = tasks.map(t => {
       const info    = STATE[t.state] || STATE.PENDING;
-      const elapsed = formatElapsed(Date.now() - t.submittedAt);
+      const elapsed = formatElapsed(t);
       const isSelected = t.id === selectedTaskId;
       const canView    = t.state === 'SUCCESS';
       const isActive   = t.state === 'PENDING' || t.state === 'STARTED' || t.state === 'PROGRESS';
@@ -519,28 +493,55 @@
         sub += ` \u00b7 #${t.position}\u200a/\u200a${t.total} in queue`;
       if ((t.state === 'PROGRESS' || t.state === 'STARTED') && t.meta?.step)
         sub += ` \u00b7 ${t.meta.step}`;
-      sub += ` \u00b7 ${elapsed}`;
+      if (elapsed) sub += ` \u00b7 ${elapsed}`;
 
       const pbClass = t.state === 'SUCCESS' ? 'pb-done'
-                    : t.state === 'FAILURE' ? 'pb-failed'
+                    : t.state === 'FAILURE' || t.state === 'REVOKED' || t.state === 'LOST' ? 'pb-failed'
                     : isActive              ? 'pb-running'
                     :                         'pb-pending';
 
-      const inlineResult = (isSelected && t.state === 'SUCCESS') ? renderInlineResult(t) : '';
+      let inlineResult = '';
+      if (isSelected && t.state === 'SUCCESS' && t.result) {
+        const isLarge = isLargeProblem(t);
+        const tabs = isLarge
+          ? `<button class="result-tab active" data-tab="solution">Solution</button>`
+          : `<button class="result-tab${selectedTab === 'solution' ? ' active' : ''}" data-tab="solution">Solution</button>
+             <button class="result-tab${selectedTab === 'input' ? ' active' : ''}" data-tab="input">Input</button>
+             <button class="result-tab${selectedTab === 'iterations' ? ' active' : ''}" data-tab="iterations">Iterations</button>`;
+        const activeTab = isLarge ? 'solution' : selectedTab;
+        const tabPanels = isLarge
+          ? `<div class="inline-tab" data-tab="solution"></div>`
+          : `<div class="inline-tab" data-tab="solution"${activeTab !== 'solution' ? ' style="display:none"' : ''}></div>
+             <div class="inline-tab" data-tab="input"${activeTab !== 'input' ? ' style="display:none"' : ''}></div>
+             <div class="inline-tab" data-tab="iterations"${activeTab !== 'iterations' ? ' style="display:none"' : ''}></div>`;
+        inlineResult = `<div class="task-inline-result">
+          <div class="inline-result-header">
+            <div class="result-tabs">${tabs}</div>
+            <div class="header-actions">
+              ${isLarge ? '<span class="file-only-hint">Full report &rarr;</span>' : ''}
+              <button class="btn btn-secondary btn-sm export-btn" data-fmt="html">&#8595; HTML</button>
+              <button class="btn btn-secondary btn-sm export-btn" data-fmt="txt">&#8595; TXT</button>
+              <button class="btn btn-secondary btn-sm export-btn" data-fmt="json">&#8595; JSON</button>
+            </div>
+          </div>
+          <div class="inline-tab-body">${tabPanels}</div>
+        </div>`;
+      }
 
       return `<div class="task-item${isSelected ? ' selected' : ''}${canView ? ' clickable' : ''}" data-id="${t.id}">
         <div class="task-item-main">
           <div class="task-item-left">
             <span class="task-dot ${info.dot}${isActive ? ' pulsing' : ''}"></span>
             <div class="task-item-info">
-              <div class="task-item-title">#${t.num} &mdash; ${esc(t.label)}</div>
+              <div class="task-item-title">${esc(t.label)}</div>
               <div class="task-item-sub">${sub}</div>
             </div>
           </div>
           <div class="task-item-actions">
             ${isActive ? `<span class="task-spinner"></span>` : ''}
+            ${isActive ? `<button class="btn btn-sm btn-cancel task-cancel" data-id="${t.id}" title="Cancel task">Cancel</button>` : ''}
             ${canView ? `<span class="task-chevron${isSelected ? ' open' : ''}" aria-hidden="true">&#8250;</span>` : ''}
-            <button class="btn btn-sm btn-icon task-dismiss" data-id="${t.id}" title="Dismiss">&times;</button>
+            ${!isActive ? `<button class="btn btn-sm btn-icon task-dismiss" data-id="${t.id}" title="Dismiss">&times;</button>` : ''}
           </div>
         </div>
         <div class="task-progress">
@@ -549,15 +550,36 @@
         ${inlineResult}
       </div>`;
     }).join('');
+
+    // Populate inline result tabs for selected task
+    if (selectedTaskId) {
+      const t = tasks.find(t => t.id === selectedTaskId);
+      if (t && t.result) {
+        const item = list.querySelector(`.task-item[data-id="${t.id}"]`);
+        if (item) {
+          const solEl = item.querySelector('.inline-tab[data-tab="solution"]');
+          if (solEl) populateSolutionTab(solEl, t.result);
+          if (!isLargeProblem(t)) {
+            const inpEl = item.querySelector('.inline-tab[data-tab="input"]');
+            const iterEl = item.querySelector('.inline-tab[data-tab="iterations"]');
+            if (inpEl) populateInputTab(inpEl, t.payload);
+            if (iterEl) populateIterationsTab(iterEl, t.result);
+          }
+        }
+      }
+    }
   }
 
   function startElapsedTimer() {
     if (_elapsedTimer) return;
     _elapsedTimer = setInterval(() => {
+      const hasRunning = tasks.some(
+        t => t.state === 'STARTED' || t.state === 'PROGRESS'
+      );
+      if (hasRunning) renderTaskList();
       const hasActive = tasks.some(
         t => t.state === 'PENDING' || t.state === 'STARTED' || t.state === 'PROGRESS'
       );
-      renderTaskList();
       if (!hasActive) {
         clearInterval(_elapsedTimer);
         _elapsedTimer = null;
@@ -567,6 +589,7 @@
 
   function startTaskPolling(task) {
     const poll = async () => {
+      if (task.state === 'REVOKED') return;
       try {
         const r = await fetch(`/api/result/${task.id}`);
         const data = await r.json();
@@ -578,16 +601,35 @@
         }
         if (data.state === 'PROGRESS' || data.state === 'STARTED') {
           task.meta = data.meta || {};
+          if (!task.startedAt) task.startedAt = Date.now();
         }
 
         if (data.state === 'SUCCESS') {
           task.result = data.result;
+          if (!task.startedAt) task.startedAt = Date.now();
+          task.finishedAt = Date.now();
+          saveTasks();
           renderTaskList();
           if (!selectedTaskId) viewTask(task.id);
           return;
         }
         if (data.state === 'FAILURE') {
           task.error = data.error || 'Worker error';
+          task.finishedAt = Date.now();
+          saveTasks();
+          renderTaskList();
+          return;
+        }
+        if (data.state === 'REVOKED') {
+          task.finishedAt = Date.now();
+          saveTasks();
+          renderTaskList();
+          return;
+        }
+        if (data.state === 'LOST') {
+          task.error = 'Task lost (server restarted or queue flushed)';
+          task.finishedAt = Date.now();
+          saveTasks();
           renderTaskList();
           return;
         }
@@ -604,12 +646,25 @@
     const task = tasks.find(t => t.id === taskId);
     if (!task || !task.result) return;
     selectedTaskId = taskId;
+    selectedTab = 'solution';
     lastResult = task.result;
-    $('solution-card').classList.add('hidden');
-    showIterations(task.result);
     renderTaskList();
     const row = document.querySelector(`.task-item[data-id="${taskId}"]`);
     if (row) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  async function cancelTask(taskId) {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    try {
+      await fetch(`/api/cancel/${taskId}`, { method: 'POST' });
+      task.state = 'REVOKED';
+      task.finishedAt = Date.now();
+      saveTasks();
+      renderTaskList();
+    } catch {
+      // ignore
+    }
   }
 
   function dismissTask(taskId) {
@@ -617,24 +672,42 @@
     if (selectedTaskId === taskId) {
       selectedTaskId = null;
       lastResult = null;
-      $('solution-card').classList.add('hidden');
-      $('iterations-card').classList.add('hidden');
     }
+    saveTasks();
     renderTaskList();
   }
 
   function clearDoneTasks() {
-    tasks = tasks.filter(t => t.state === 'PENDING' || t.state === 'STARTED');
+    const isFinished = t => t.state === 'SUCCESS' || t.state === 'FAILURE' || t.state === 'REVOKED' || t.state === 'LOST';
+    tasks = tasks.filter(t => !isFinished(t));
     if (selectedTaskId) {
       const still = tasks.find(t => t.id === selectedTaskId);
       if (!still) {
         selectedTaskId = null;
         lastResult = null;
-        $('solution-card').classList.add('hidden');
-        $('iterations-card').classList.add('hidden');
       }
     }
+    saveTasks();
     renderTaskList();
+  }
+
+  // ── Large problem mode ──
+
+  let importedFileName = null;
+
+  function checkFormSize() {
+    const large = numVars > MAX_FORM_VARS || cons.length > MAX_FORM_CONS;
+    $('form-inputs').classList.toggle('hidden', large);
+    $('file-only-banner').classList.toggle('hidden', !large);
+
+    const fileInfo = $('large-file-info');
+    if (large && importedFileName) {
+      fileInfo.classList.remove('hidden');
+      $('large-file-name').textContent = importedFileName;
+      $('large-file-meta').textContent = `${numVars} variables, ${cons.length} constraints`;
+    } else {
+      fileInfo.classList.add('hidden');
+    }
   }
 
   // ── Actions ──
@@ -651,18 +724,27 @@
     renderObjective();
     renderConstraints();
     updatePreview();
+    checkFormSize();
   }
 
   function addConstraint() {
     cons.push({ coefficients: new Array(numVars).fill(''), sense: '<=', rhs: '' });
     renderConstraints();
     updatePreview();
+    checkFormSize();
   }
 
   async function solve() {
+    if (tasks.length >= MAX_TASKS) {
+      $('error-body').innerHTML = `<div class="error-banner">History is full (${MAX_TASKS} tasks). Remove some tasks to continue.</div>`;
+      $('error-card').classList.remove('hidden');
+      return;
+    }
+
     const btn = $('solve-btn');
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span>';
+    $('error-card').classList.add('hidden');
 
     syncCons();
     const payload = {
@@ -700,15 +782,14 @@
         payload,
       };
       tasks.unshift(task);
+      saveTasks();
       renderTaskList();
       startElapsedTimer();
       startTaskPolling(task);
 
-      $('queue-dot').className = 'queue-dot dot-busy';
-
     } catch (err) {
-      showSolution({ status: 'error', error: err.message || 'Network error' });
-      $('solution-card').classList.remove('hidden');
+      $('error-body').innerHTML = `<div class="error-banner">${esc(err.message || 'Network error')}</div>`;
+      $('error-card').classList.remove('hidden');
     } finally {
       btn.disabled = false;
       btn.textContent = 'Solve';
@@ -716,6 +797,7 @@
   }
 
   function loadExample(ex) {
+    importedFileName = ex.name;
     numVars = ex.numVars;
     $('var-count').textContent = numVars;
     $('obj-sense').value = ex.objective.sense;
@@ -727,8 +809,8 @@
     ex.objective.coefficients.forEach((v, i) => { if (objInputs[i]) objInputs[i].value = v; });
     renderConstraints();
     updatePreview();
-    $('solution-card').classList.add('hidden');
-    $('iterations-card').classList.add('hidden');
+    checkFormSize();
+    $('error-card').classList.add('hidden');
   }
 
   function renderExamples() {
@@ -751,14 +833,15 @@
       const resp = await fetch('/api/import', { method: 'POST', body: fd });
       const data = await resp.json();
       if (data.error) {
-        showSolution({ status: 'error', error: `Import error: ${data.error}` });
-        $('solution-card').classList.remove('hidden');
+        $('error-body').innerHTML = `<div class="error-banner">${esc(`Import error: ${data.error}`)}</div>`;
+        $('error-card').classList.remove('hidden');
         return;
       }
+      importedFileName = file.name;
       loadImported(data);
     } catch (e) {
-      showSolution({ status: 'error', error: `Import failed: ${e.message}` });
-      $('solution-card').classList.remove('hidden');
+      $('error-body').innerHTML = `<div class="error-banner">${esc(`Import failed: ${e.message}`)}</div>`;
+      $('error-card').classList.remove('hidden');
     }
   }
 
@@ -777,8 +860,8 @@
     data.objective.coefficients.forEach((v, i) => { if (objInputs[i]) objInputs[i].value = v; });
     renderConstraints();
     updatePreview();
-    $('solution-card').classList.add('hidden');
-    $('iterations-card').classList.add('hidden');
+    checkFormSize();
+    $('error-card').classList.add('hidden');
     lastResult = null;
   }
 
@@ -809,10 +892,16 @@
 
   function generateHtmlReport() {
     const problemText = $('preview').textContent;
-    const solutionHtml = $('solution-body').innerHTML;
-    // Open all iterations
-    const iterHtml = $('iterations-body').innerHTML
-      .replace(/class="iteration(?:\s+open)?"/g, 'class="iteration open"');
+    const selectedItem = selectedTaskId
+      ? document.querySelector(`.task-item[data-id="${selectedTaskId}"]`)
+      : null;
+    const solutionHtml = selectedItem
+      ? (selectedItem.querySelector('.inline-tab[data-tab="solution"]')?.innerHTML || '')
+      : '';
+    const iterHtml = selectedItem
+      ? (selectedItem.querySelector('.inline-tab[data-tab="iterations"]')?.innerHTML || '')
+          .replace(/class="iteration(?:\s+open)?"/g, 'class="iteration open"')
+      : '';
     const now = new Date().toLocaleString();
 
     return `<!DOCTYPE html>
@@ -918,7 +1007,7 @@ pre{font-family:'JetBrains Mono',monospace;font-size:13px;line-height:2;white-sp
   }
 
   function renderTableauTxt(it, allColHeaders) {
-    const { tableau, basisVariables, pivotRow, pivotColumn, ratios } = it;
+    const { tableau, basisVariables, ratios } = it;
     const tableCols = tableau.cols;
     const constraintRows = tableau.data.slice(0, -1);
     const objectiveRow = tableau.data[tableau.data.length - 1];
@@ -954,7 +1043,6 @@ pre{font-family:'JetBrains Mono',monospace;font-size:13px;line-height:2;white-sp
   }
 
   function asciiTable(headers, rows) {
-    const cols = headers.length;
     const widths = headers.map((h, i) =>
       Math.max(String(h).length, ...rows.map(r => String(r[i] ?? '').length))
     );
@@ -979,9 +1067,6 @@ pre{font-family:'JetBrains Mono',monospace;font-size:13px;line-height:2;white-sp
       if (e.target.files[0]) importFile(e.target.files[0]);
       e.target.value = '';
     });
-    $('export-html').addEventListener('click', () => downloadReport('html'));
-    $('export-txt').addEventListener('click', () => downloadReport('txt'));
-    $('export-json').addEventListener('click', () => downloadReport('json'));
 
     document.addEventListener('keydown', e => {
       if (e.key === 'Enter' && e.target.classList.contains('coeff-input')) {
@@ -992,8 +1077,28 @@ pre{font-family:'JetBrains Mono',monospace;font-size:13px;line-height:2;white-sp
 
     // Task list event delegation
     $('tasks-list').addEventListener('click', e => {
+      const cancelBtn = e.target.closest('.task-cancel');
+      if (cancelBtn) { cancelTask(cancelBtn.dataset.id); return; }
+
       const dismissBtn = e.target.closest('.task-dismiss');
       if (dismissBtn) { dismissTask(dismissBtn.dataset.id); return; }
+
+      // Tab switching
+      const tabBtn = e.target.closest('.result-tab');
+      if (tabBtn) {
+        selectedTab = tabBtn.dataset.tab;
+        const container = tabBtn.closest('.task-inline-result');
+        if (container) {
+          container.querySelectorAll('.result-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === selectedTab));
+          container.querySelectorAll('.inline-tab').forEach(t => t.style.display = t.dataset.tab === selectedTab ? '' : 'none');
+        }
+        return;
+      }
+
+      // Export buttons
+      const exportBtn = e.target.closest('.export-btn');
+      if (exportBtn) { downloadReport(exportBtn.dataset.fmt); return; }
+
       const rowMain = e.target.closest('.task-item-main');
       if (rowMain) {
         const taskEl = rowMain.closest('.task-item');
@@ -1002,7 +1107,6 @@ pre{font-family:'JetBrains Mono',monospace;font-size:13px;line-height:2;white-sp
           if (selectedTaskId === t.id) {
             selectedTaskId = null;
             lastResult = null;
-            $('iterations-card').classList.add('hidden');
             renderTaskList();
           } else {
             viewTask(t.id);
@@ -1012,12 +1116,13 @@ pre{font-family:'JetBrains Mono',monospace;font-size:13px;line-height:2;white-sp
     });
     $('clear-done-btn').addEventListener('click', clearDoneTasks);
 
+    loadTasks();
     renderObjective();
     renderConstraints();
     renderExamples();
     updatePreview();
+    renderTaskList();
     startQueuePolling();
-    startWorkersPolling();
   }
 
   document.readyState === 'loading'

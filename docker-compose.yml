@@ -1,123 +1,140 @@
-services:
+x-shared-env: &shared-env
+  REDIS_URL: redis://redis:6379/0
+  LIMO_BINARY: /app/limo
 
-  # ── Message broker + result backend ──────────────────────────────────────────
+x-app-build: &app-build
+  context: .
+  dockerfile: docker/Dockerfile
+
+services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    stop_grace_period: 5s
     command: >
       redis-server
-        --maxmemory ${REDIS_MAXMEMORY:-256mb}
+        --maxmemory ${REDIS_MAXMEMORY:-128mb}
         --maxmemory-policy allkeys-lru
+        --appendonly no
         --save ""
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
-    volumes:
-      - redis_data:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    mem_limit: 192m
     networks:
       - backend
 
-  # ── Flask web server (gunicorn) ──────────────────────────────────────────────
-  web:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile
-    restart: unless-stopped
-    env_file: .env
-    environment:
-      REDIS_URL:    redis://redis:6379/0
-      LIMO_BINARY:  /app/limo
+  redis-init:
+    image: redis:7-alpine
+    restart: "no"
     depends_on:
       redis:
         condition: service_healthy
+    command: >
+      sh -c "redis-cli -h redis FLUSHALL && echo 'Redis flushed'"
+    networks:
+      - backend
+
+  web:
+    build: *app-build
+    restart: unless-stopped
+    stop_grace_period: 5s
+    env_file: .env
+    environment:
+      <<: *shared-env
+    depends_on:
+      redis-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5050/api/status')"]
       interval: 10s
-      timeout:  5s
-      retries:  5
+      timeout: 5s
+      retries: 5
       start_period: 15s
+    mem_limit: 256m
     networks:
       - backend
 
-  # ── Celery solver worker (autoscaler will scale this) ────────────────────────
   worker:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile
+    build: *app-build
     restart: unless-stopped
+    stop_grace_period: 10s
     command: >
-      celery -A web.tasks worker
+      celery -A web.worker:celery_app worker
         --loglevel=info
         --concurrency=1
-        --without-gossip
-        --without-mingle
+        --prefetch-multiplier=1
+        -Ofair
+        -E
+        -Q celery
     env_file: .env
     environment:
-      REDIS_URL:   redis://redis:6379/0
-      LIMO_BINARY: /app/limo
+      <<: *shared-env
     depends_on:
-      redis:
-        condition: service_healthy
+      redis-init:
+        condition: service_completed_successfully
     deploy:
       replicas: 1
-      resources:
-        limits:
-          cpus: "1.0"
-          memory: 512M
+    mem_limit: 384m
     networks:
       - backend
 
-  # ── Flower: Celery monitoring UI (dev/debug only) ───────────────────────────
   flower:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile
+    build: *app-build
     restart: unless-stopped
-    profiles: ["monitoring"]
+    stop_grace_period: 5s
     command: >
-      celery -A web.tasks flower
+      celery -A web.worker:celery_app flower
         --port=5555
         --broker_api=redis://redis:6379/0
+        --persistent=True
+        --state_save_interval=5000
     environment:
-      REDIS_URL:   redis://redis:6379/0
-      LIMO_BINARY: /app/limo
+      <<: *shared-env
     ports:
       - "${FLOWER_PORT:-5555}:5555"
     depends_on:
-      redis:
-        condition: service_healthy
+      redis-init:
+        condition: service_completed_successfully
+    mem_limit: 192m
     networks:
       - backend
 
-  # ── Queue-depth autoscaler ──────────────────────────────────────────────────
   autoscaler:
     build:
       context: .
       dockerfile: docker/Dockerfile.autoscaler
     restart: unless-stopped
+    stop_grace_period: 5s
     environment:
-      REDIS_URL:              redis://redis:6379/0
-      COMPOSE_FILE:           /app/project/docker-compose.yml
-      COMPOSE_PROJECT_NAME:   limo
-      MIN_WORKERS:            "${MIN_WORKERS:-1}"
-      MAX_WORKERS:            "${MAX_WORKERS:-8}"
-      TASKS_PER_WORKER:       "${TASKS_PER_WORKER:-2}"
+      REDIS_URL: redis://redis:6379/0
+      COMPOSE_FILE: /app/project/docker-compose.yml
+      COMPOSE_PROJECT_NAME: limo
+      MIN_WORKERS: "${MIN_WORKERS:-1}"
+      MAX_WORKERS: "${MAX_WORKERS:-3}"
+      TASKS_PER_WORKER: "${TASKS_PER_WORKER:-2}"
       IDLE_BEFORE_SCALE_DOWN: "${IDLE_BEFORE_SCALE_DOWN:-30}"
-      CHECK_INTERVAL:         "${CHECK_INTERVAL:-10}"
+      CHECK_INTERVAL: "${CHECK_INTERVAL:-5}"
+      SCALE_COOLDOWN: "${SCALE_COOLDOWN:-10}"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./docker-compose.yml:/app/project/docker-compose.yml:ro
+      - ./.env:/app/project/.env:ro
     depends_on:
-      - redis
+      redis-init:
+        condition: service_completed_successfully
+    mem_limit: 64m
     networks:
       - backend
 
-  # ── Nginx reverse proxy + static file server ────────────────────────────────
   nginx:
     image: nginx:1.25-alpine
     restart: unless-stopped
+    stop_grace_period: 3s
     ports:
       - "${PORT:-80}:80"
     volumes:
@@ -126,11 +143,9 @@ services:
     depends_on:
       web:
         condition: service_healthy
+    mem_limit: 64m
     networks:
       - backend
-
-volumes:
-  redis_data:
 
 networks:
   backend:

@@ -17,13 +17,9 @@
                 <span class="tagline">Linear Method Optimizer &mdash; Exact Rational Arithmetic</span>
             </div>
             <div class="navbar-status">
-                <div class="workers-indicator" id="workers-indicator" title="Active Celery workers">
-                    <span class="status-dot" id="workers-dot"></span>
-                    <span id="workers-label">Workers: —</span>
-                </div>
-                <div class="queue-indicator" id="queue-indicator" title="Tasks waiting in queue">
-                    <span class="queue-dot" id="queue-dot"></span>
-                    <span id="queue-label">Queue: —</span>
+                <div class="queue-indicator" id="queue-indicator" title="Task history usage">
+                    <span class="queue-dot dot-idle" id="queue-dot"></span>
+                    <span id="queue-label">Tasks: 0 / 15</span>
                 </div>
             </div>
         </div>
@@ -37,11 +33,15 @@
                     <div class="card-header">
                         <h2>Problem Definition</h2>
                         <div class="header-actions">
+                            <span class="import-formats-hint">CSV, TXT</span>
                             <button class="btn btn-secondary btn-sm" id="import-btn">&#8593; Import</button>
-                            <input type="file" id="file-import" accept=".json,.csv,.txt" style="display:none">
+                            <input type="file" id="file-import" accept=".csv,.txt" style="display:none">
                         </div>
                     </div>
                     <div class="card-body">
+                        <div class="file-only-banner hidden" id="file-only-banner">
+                            Problem too large for manual input. Use <strong>&#8593; Import</strong> to load from file, results will be available as file exports.
+                        </div>
                         <div id="form-inputs">
                         <div class="form-group">
                             <label>Number of Variables</label>
@@ -76,11 +76,15 @@
                                 <option value="artificial">Two-Phase (Artificial)</option>
                             </select>
                         </div>
-                        </div>
-
                         <div class="form-preview">
                             <div class="form-preview-label">Preview</div>
                             <div class="math-preview" id="preview"></div>
+                        </div>
+                        </div>
+
+                        <div id="large-file-info" class="large-file-info hidden">
+                            <div class="large-file-name" id="large-file-name"></div>
+                            <div class="large-file-meta" id="large-file-meta"></div>
                         </div>
 
                         <button class="btn btn-primary btn-block" id="solve-btn">Solve</button>
@@ -103,11 +107,6 @@
                     <div class="card-body">
                         <p class="hint-text">Download and inspect examples of each supported import format, then load them with the <strong>&#8593; Import</strong> button above.</p>
                         <div class="sample-files">
-                            <a class="sample-file-btn" href="/static/examples/production-planning.json" download>
-                                <span class="fmt-badge fmt-json">JSON</span>
-                                <span class="sample-name">Production Planning</span>
-                                <span class="sample-desc">max 30x&#8321; + 20x&#8322;</span>
-                            </a>
                             <a class="sample-file-btn" href="/static/examples/mixed-constraints.csv" download>
                                 <span class="fmt-badge fmt-csv">CSV</span>
                                 <span class="sample-name">Mixed Constraints</span>
@@ -122,6 +121,11 @@
                                 <span class="fmt-badge fmt-txt">TXT</span>
                                 <span class="sample-name">3-Variable Problem</span>
                                 <span class="sample-desc">max 2x&#8321;+3x&#8322;+5x&#8323; with comments</span>
+                            </a>
+                            <a class="sample-file-btn" href="/static/examples/large-stress-test.txt" download>
+                                <span class="fmt-badge fmt-txt">TXT</span>
+                                <span class="sample-name">Stress Test (20-var)</span>
+                                <span class="sample-desc">min 20 vars, 80 mixed constraints</span>
                             </a>
                         </div>
                     </div>
@@ -140,23 +144,10 @@
                     <div id="tasks-list"></div>
                 </div>
 
-                <div class="card hidden" id="solution-card">
-                    <div class="card-header">
-                        <h2>Solution</h2>
+                <div class="card hidden" id="error-card">
+                    <div class="card-body">
+                        <div id="error-body"></div>
                     </div>
-                    <div class="card-body" id="solution-body"></div>
-                </div>
-
-                <div class="card hidden" id="iterations-card">
-                    <div class="card-header">
-                        <h2>Simplex Iterations</h2>
-                        <div class="header-actions">
-                            <button class="btn btn-secondary btn-sm" id="export-html">&#8595; HTML</button>
-                            <button class="btn btn-secondary btn-sm" id="export-txt">&#8595; TXT</button>
-                            <button class="btn btn-secondary btn-sm" id="export-json">&#8595; JSON</button>
-                        </div>
-                    </div>
-                    <div class="card-body" id="iterations-body"></div>
                 </div>
             </div>
         </div>
