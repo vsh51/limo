@@ -41,7 +41,21 @@ static Matrix buildTableau(
     for (std::size_t r = 0; r < m; ++r) {
         const std::size_t bc = basis[r];
 
+        // Partial pivot: when the current row has a zero in the basis column
+        // (can happen for phase-2 bases carried over from phase-1), find any
+        // row below with a non-zero coefficient and swap it up.
+        if (tableau(r, bc) == Fraction{0}) {
+            for (std::size_t r2 = r + 1; r2 < m; ++r2) {
+                if (tableau(r2, bc) != Fraction{0}) {
+                    tableau.swap_rows(r, r2);
+                    break;
+                }
+            }
+        }
+
         const Fraction pivotElem = tableau(r, bc);
+        if (pivotElem == Fraction{0}) continue;  // degenerate column — skip
+
         if (pivotElem != Fraction{1}) {
             tableau.scale_row(r, Fraction{1} / pivotElem);
         }

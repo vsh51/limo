@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LIMO - Linear Method Optimizer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container navbar-inner">
+            <div class="brand">
+                <span class="logo">LIMO</span>
+                <span class="tagline">Linear Method Optimizer &mdash; Exact Rational Arithmetic</span>
+            </div>
+            <div class="navbar-status">
+                <div class="queue-indicator" id="queue-indicator" title="Task history usage">
+                    <span class="queue-dot dot-idle" id="queue-dot"></span>
+                    <span id="queue-label">Tasks: 0 / 15</span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container">
+        <div class="layout">
+            <!-- Input Panel -->
+            <div class="panel">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Problem Definition</h2>
+                        <div class="header-actions">
+                            <span class="import-formats-hint">CSV, TXT</span>
+                            <button class="btn btn-secondary btn-sm" id="import-btn">&#8593; Import</button>
+                            <input type="file" id="file-import" accept=".csv,.txt" style="display:none">
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="file-only-banner hidden" id="file-only-banner">
+                            Problem too large for manual input. Use <strong>&#8593; Import</strong> to load from file, results will be available as file exports.
+                        </div>
+                        <div id="form-inputs">
+                        <div class="form-group">
+                            <label>Number of Variables</label>
+                            <div class="var-control">
+                                <button class="btn btn-icon" id="dec-vars">&minus;</button>
+                                <span id="var-count">2</span>
+                                <button class="btn btn-icon" id="inc-vars">+</button>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Objective Function</label>
+                            <div class="obj-row">
+                                <select class="select" id="obj-sense">
+                                    <option value="maximize">Maximize</option>
+                                    <option value="minimize">Minimize</option>
+                                </select>
+                                <div class="coeff-row" id="obj-coeffs"></div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Constraints</label>
+                            <div id="constraints"></div>
+                            <button class="btn btn-secondary btn-sm" id="add-constraint">+ Add Constraint</button>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Basis Method</label>
+                            <select class="select" id="basis-method">
+                                <option value="big-m">Big M</option>
+                                <option value="artificial">Two-Phase (Artificial)</option>
+                            </select>
+                        </div>
+                        <div class="form-preview">
+                            <div class="form-preview-label">Preview</div>
+                            <div class="math-preview" id="preview"></div>
+                        </div>
+                        </div>
+
+                        <div id="large-file-info" class="large-file-info hidden">
+                            <div class="large-file-name" id="large-file-name"></div>
+                            <div class="large-file-meta" id="large-file-meta"></div>
+                        </div>
+
+                        <button class="btn btn-primary btn-block" id="solve-btn">Solve</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Examples</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="example-grid" id="examples"></div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Sample Import Files</h2>
+                    </div>
+                    <div class="card-body">
+                        <p class="hint-text">Download and inspect examples of each supported import format, then load them with the <strong>&#8593; Import</strong> button above.</p>
+                        <div class="sample-files">
+                            <a class="sample-file-btn" href="/static/examples/mixed-constraints.csv" download>
+                                <span class="fmt-badge fmt-csv">CSV</span>
+                                <span class="sample-name">Mixed Constraints</span>
+                                <span class="sample-desc">max 5x&#8321; + 4x&#8322; with &ge;, &le;</span>
+                            </a>
+                            <a class="sample-file-btn" href="/static/examples/minimization.csv" download>
+                                <span class="fmt-badge fmt-csv">CSV</span>
+                                <span class="sample-name">Minimization</span>
+                                <span class="sample-desc">min 2x&#8321; + 3x&#8322;</span>
+                            </a>
+                            <a class="sample-file-btn" href="/static/examples/three-variables.txt" download>
+                                <span class="fmt-badge fmt-txt">TXT</span>
+                                <span class="sample-name">3-Variable Problem</span>
+                                <span class="sample-desc">max 2x&#8321;+3x&#8322;+5x&#8323; with comments</span>
+                            </a>
+                            <a class="sample-file-btn" href="/static/examples/large-stress-test.txt" download>
+                                <span class="fmt-badge fmt-txt">TXT</span>
+                                <span class="sample-name">Stress Test (20-var)</span>
+                                <span class="sample-desc">min 20 vars, 80 mixed constraints</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Output Panel -->
+            <div class="panel">
+                <div class="card hidden" id="tasks-card">
+                    <div class="card-header">
+                        <h2>Task Queue</h2>
+                        <div class="header-actions">
+                            <button class="btn btn-secondary btn-sm" id="clear-done-btn">Clear done</button>
+                        </div>
+                    </div>
+                    <div id="tasks-list"></div>
+                </div>
+
+                <div class="card hidden" id="error-card">
+                    <div class="card-body">
+                        <div id="error-body"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

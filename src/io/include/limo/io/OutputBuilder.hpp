@@ -8,6 +8,7 @@
 #include "limo/core/LinearProgram.hpp"
 #include "limo/core/Result.hpp"
 #include "limo/core/Solution.hpp"
+#include "limo/io/InputParser.hpp"
 #include "limo/io/SimplexTableau.hpp"
 
 namespace limo::io {
@@ -36,6 +37,22 @@ public:
         const std::string& basisMethod,
         const std::vector<SimplexTableau>& iterations,
         const limo::core::Solution& solution
+    );
+
+    /**
+     * @brief Build a JSON response containing only the parsed LP problem.
+     *
+     * Used by the --parse-only CLI mode so that the web server can convert
+     * a CSV or TXT file into the web frontend's input format without running
+     * the solver.
+     *
+     * @param lp     The parsed linear program.
+     * @param config Solver configuration (only basisMethod is included).
+     * @return JSON with status "ok", objective, constraints, and basisMethod.
+     */
+    static nlohmann::json buildParsedInput(
+        const limo::core::LinearProgram& lp,
+        const SolverConfig& config
     );
 
     /**

@@ -1,6 +1,7 @@
 add_library(limo_io
     src/JsonSerializer.cpp
     src/InputParser.cpp
+    src/FileParser.cpp
     src/OutputBuilder.cpp
     src/IterationCollector.cpp
 )

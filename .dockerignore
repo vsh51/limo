@@ -1,17 +1,20 @@
 # Build artifacts
 build/
 CMakeFiles/
+*.cmake
 cmake_install.cmake
+
+# Version control
+.git/
+.github/
 
 # IDE / editor
 .vs/
-.vscode/
 .idea/
 *.user
-*.swp
-*~
+.vscode/
 
-# Python
+# Python cache
 __pycache__/
 *.pyc
 *.pyo
@@ -19,8 +22,11 @@ __pycache__/
 .pytest_cache/
 .coverage
 htmlcov/
-*.egg-info/
-dist/
+
+# Documentation
+doc/
+docs/
+Doxyfile.in
 
 # Test output / coverage
 *.gcov
@@ -28,17 +34,21 @@ dist/
 *.gcno
 coverage/
 
-# Environment
-.env
-.env.local
-.env.*.local
-
-# Logs
-*.log
-
 # OS artifacts
 .DS_Store
 Thumbs.db
 
-# Docker
-docker-compose.override.yml
+# Environment & config
+.env
+.env.*
+!.env.example
+
+# Temporary files
+*.tmp
+*.log
+
+# Not needed in container
+tests/
+Makefile
+README.md
+LICENSE
